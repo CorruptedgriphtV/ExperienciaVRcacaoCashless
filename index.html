@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cacaos Pay VR</title>
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Lienzo 3D a pantalla completa + panel de control abajo a la izquierda.
+   Paleta de Cacaos Pay: cacao, oro, hoja, terracota, crema. */
+:root{
+  --cacao-900:#14100D; --cacao-800:#1E1813; --cacao-700:#2A211A; --linea:#3B2F25;
+  --oro:#D4AF37; --hoja:#6A9A52; --terracota:#C25A36; --crema:#F6EFE2;
+  --texto:#D8CBB8; --tenue:#A08F79;
+  --f-display:"Bricolage Grotesque","Trebuchet MS",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0}
+[hidden]{display:none!important}
+body{background:var(--cacao-900);color:var(--texto);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;overflow:hidden}
+#stage{position:fixed;inset:0}
+#stage canvas{display:block;touch-action:none;cursor:grab}
+#stage canvas:active{cursor:grabbing}
+.top{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));display:flex;gap:12px;align-items:center;justify-content:space-between;pointer-events:none}
+.marca{display:flex;align-items:baseline;gap:10px;pointer-events:auto}
+.marca b{font-family:var(--f-display);font-weight:800;font-size:1.35rem;color:var(--crema);letter-spacing:-.01em}
+.marca b span{color:var(--oro)}
+.marca small{font-family:var(--f-mono);font-size:.72rem;color:var(--tenue);text-transform:uppercase;letter-spacing:.1em}
+button{font:inherit;cursor:pointer}
+.vr{pointer-events:auto;background:var(--oro);color:var(--cacao-900);border:0;border-radius:10px;padding:10px 16px;font-weight:700;font-family:var(--f-display)}
+.vr:disabled{background:var(--cacao-700);color:var(--tenue);cursor:not-allowed;border:1px solid var(--linea)}
+.vr:focus-visible,.hud button:focus-visible{outline:2px solid var(--crema);outline-offset:2px}
+.hud{position:fixed;left:max(16px,env(safe-area-inset-left,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));width:min(380px,calc(100vw - 32px));max-height:calc(100% - 90px);overflow:auto;background:rgba(20,16,13,.9);border:1px solid var(--linea);border-radius:14px;padding:14px;display:grid;gap:12px;backdrop-filter:blur(6px);box-sizing:border-box}
+.saldo{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.saldo .lbl{font-family:var(--f-mono);font-size:.7rem;color:var(--tenue);text-transform:uppercase;letter-spacing:.08em}
+.saldo .val{font-family:var(--f-display);font-weight:800;font-size:1.6rem;color:var(--crema);font-variant-numeric:tabular-nums}
+.saldo .val small{font-size:.85rem;color:var(--oro);font-weight:600}
+.saldo .lim{text-align:right;font-family:var(--f-mono);font-size:.75rem;color:var(--texto)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-family:var(--f-mono);font-size:.72rem;border:1px solid var(--linea);border-radius:999px;padding:3px 9px;color:var(--tenue)}
+.chip::before{content:"○ "}
+.chip[data-ok="true"]{border-color:var(--hoja);color:var(--crema)}
+.chip[data-ok="true"]::before{content:"✓ ";color:var(--hoja)}
+#sel{font-size:.88rem;min-height:2.6em;border-left:3px solid var(--oro);padding-left:10px;color:var(--texto)}
+#sel b{color:var(--crema)}
+.fila{display:flex;flex-wrap:wrap;gap:6px}
+.fila button{background:var(--cacao-800);color:var(--texto);border:1px solid var(--linea);border-radius:8px;padding:6px 10px;font-size:.82rem}
+.fila button:hover{border-color:var(--oro);color:var(--crema)}
+.fila button[aria-pressed="true"]{background:var(--terracota);border-color:var(--terracota);color:var(--crema)}
+.fila button.prim{border-color:var(--oro);color:var(--oro)}
+details summary{cursor:pointer;font-size:.8rem;color:var(--tenue);font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.08em}
+details ul,details ol{margin:8px 0 0;padding-left:18px;font-size:.8rem;line-height:1.55}
+kbd{font-family:var(--f-mono);font-size:.75rem;background:var(--cacao-700);border:1px solid var(--linea);border-radius:4px;padding:0 4px;color:var(--crema)}
+#feed{list-style:none;margin:0;padding:0;display:grid;gap:5px;font-family:var(--f-mono);font-size:.72rem}
+#feed li{display:grid;grid-template-columns:auto 1fr;gap:8px;min-width:0}
+#feed li span{color:var(--tenue)}
+#feed li code{color:var(--texto);overflow-wrap:anywhere}
+#feed li.err code{color:var(--terracota)}
+#feed li.ok code{color:var(--hoja)}
+#xrNote{font-size:.75rem;color:var(--tenue);margin:0}
+.subs{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));width:min(620px,calc(100vw - 32px));box-sizing:border-box;background:rgba(20,16,13,.92);border-left:4px solid var(--oro);border-radius:10px;padding:10px 14px;color:var(--crema);font-size:1rem;line-height:1.4}
+.subs b{color:var(--oro);font-family:var(--f-display);margin-right:4px}
+@media (min-width:900px){ .subs{left:calc(50% + 200px)} }
+@media (max-width:899px){ .subs{bottom:auto;top:calc(64px + env(safe-area-inset-top,0px))} }
+.export{position:fixed;inset:0;background:rgba(10,8,6,.75);display:grid;place-items:center;padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px))}
+.export .caja{background:var(--cacao-800);border:1px solid var(--oro);border-radius:14px;padding:16px;width:min(560px,100%);display:grid;gap:10px;box-sizing:border-box}
+.export h2{margin:0;font-family:var(--f-display);color:var(--crema);font-size:1.1rem}
+.export textarea{width:100%;height:280px;background:#0F0C0A;color:var(--crema);border:1px solid var(--linea);border-radius:8px;font-family:var(--f-mono);font-size:.75rem;padding:10px;box-sizing:border-box}
+.toast{position:fixed;top:calc(64px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);background:var(--cacao-800);border:1px solid var(--oro);color:var(--crema);padding:8px 14px;border-radius:999px;font-size:.85rem}
+@media (max-width:520px){ .marca small{display:none} .hud{max-height:46%} }
+@media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="top">
+  <div class="marca"><b>Cacaos<span>Pay</span></b><small>Casona · prototipo VR de máquinas IoT</small></div>
+  <button class="vr" id="vrBtn" disabled>Comprobando VR…</button>
+</div>
+
+<div class="hud" id="hud">
+  <div class="saldo">
+    <div>
+      <div class="lbl" id="uid">Visitante sin registrar</div>
+      <div class="val" id="bal">20 <small>cacaos</small></div>
+    </div>
+    <div class="lim">Dispensado este mes<br><b id="lim">0 / 20 g</b></div>
+  </div>
+  <div class="chips" aria-label="Estado de la visita">
+    <span class="chip" id="chipRostro" data-ok="false">Rostro</span>
+    <span class="chip" id="chipFirma" data-ok="false">Firma del día</span>
+    <span class="chip" id="chipLlavero" data-ok="false">Llavero NFC</span>
+  </div>
+  <div id="sel">Apunta a algo. Clic o gatillo para usarlo.</div>
+  <div class="fila" role="group" aria-label="Ir a zona">
+    <button data-zone="0">1 · Calle</button>
+    <button data-zone="1">2 · Lobby</button>
+    <button data-zone="2">3 · Barra</button>
+    <button data-zone="3">4 · Cocina</button>
+    <button data-zone="4">5 · Dispensario</button>
+  </div>
+  <div class="fila">
+    <button id="visitaBtn" class="prim">Reiniciar visita</button>
+    <button id="socioBtn">Soy socio registrado</button>
+  </div>
+  <div class="fila">
+    <button id="editBtn" aria-pressed="false">Modo edición</button>
+    <button id="exportBtn">Exportar layout</button>
+    <button id="resetBtn">Restablecer layout</button>
+  </div>
+  <ol id="feed" aria-label="Eventos MQTT recientes"></ol>
+  <details>
+    <summary>Recorrido</summary>
+    <ol>
+      <li><b>Calle:</b> mira la cámara de la fachada. Si no te reconoce, después de 5 s te avisa por voz y abre la puerta.</li>
+      <li><b>Lobby:</b> Lorenzo el Cacao captura tu cara, firmas en su tablet y le metes monedas de $10 para tu llavero NFC.</li>
+      <li><b>Barra:</b> pides en la tablet y pagas con el llavero. La comanda llega a la cocina.</li>
+      <li><b>Cocina:</b> el chef la prepara y el plato sale por el pase.</li>
+    </ol>
+  </details>
+  <details>
+    <summary>Controles</summary>
+    <ul>
+      <li><b>Rift (Touch):</b> gatillo usa o teletransporta · mantén el gatillo sobre la tablet para firmar · stick izq. camina · stick der. gira 30° · <b>X/A</b> siguiente zona · <b>Y/B</b> modo edición.</li>
+      <li><b>Escritorio:</b> arrastra para mirar · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> caminar · clic usar / teletransportar · arrastra sobre la tablet para firmar · <kbd>1</kbd>–<kbd>5</kbd> zonas · <kbd>E</kbd> edición · <kbd>Q</kbd>/<kbd>R</kbd> girar máquina.</li>
+    </ul>
+  </details>
+  <p id="xrNote"></p>
+</div>
+
+<div class="subs" id="subs" hidden aria-live="polite"></div>
+
+<div class="export" id="exportBox" hidden>
+  <div class="caja">
+    <h2>Layout de máquinas</h2>
+    <textarea id="layoutJson" readonly></textarea>
+    <div class="fila"><button id="copyBtn">Copiar JSON</button><button id="closeBtn">Cerrar</button></div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
