@@ -48,7 +48,7 @@ export function zoneAt(x, z) {
 export const ZONES = [
   { key: 'calle', name: 'Calle', spot: [0, 18.5], yaw: 0 },
   { key: 'lobby', name: 'Lobby', spot: [-0.6, 8], yaw: Math.PI / 2 },
-  { key: 'main', name: 'Barra', spot: [5.6, -0.5], yaw: -Math.PI / 2 },
+  { key: 'main', name: 'Barra', spot: [6.6, -0.5], yaw: -Math.PI / 2 },
   { key: 'cocina', name: 'Cocina', spot: [2.2, -8.5], yaw: -Math.PI / 2 },
   { key: 'dispensario', name: 'Dispensario', spot: [-6.3, -7.6], yaw: 0 },
 ];
@@ -140,6 +140,11 @@ export function addCollider(obj) {
 }
 /** Muro/mueble: bloquea rayo y paso. */
 export function solid(mesh) { addBlocker(mesh); addCollider(mesh); return mesh; }
+/** Recalcula las colisiones que cuelgan de root (tras moverlo). */
+export function refreshColliders(root) {
+  root.updateMatrixWorld(true);
+  for (const c of colliders) { let o = c.obj; while (o && o !== root) o = o.parent; if (o) c.box.setFromObject(c.obj); }
+}
 export function blockedAt(x, z) {
   if (x < -11.7 || x > 11.7 || z < -11.7 || z > 21.7) return true;
   for (const c of colliders) {
@@ -183,10 +188,10 @@ let actx = null;
 export function ensureAudio() { try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch (e) { actx = null; } }
 export function beep(kind = 'info') {
   if (!actx) return;
-  const seq = kind === 'ok' ? [[1320, .07], [1760, .1]] : kind === 'err' ? [[330, .14], [220, .22]] : kind === 'coin' ? [[2100, .05], [2600, .09]] : [[990, .08]];
+  const seq = kind === 'ok' ? [[1320, .07], [1760, .1]] : kind === 'err' ? [[330, .14], [220, .22]] : kind === 'coin' ? [[2100, .05], [2600, .09]] : kind === 'campana' ? [[2637, .6], [3520, .5]] : [[990, .08]];
   let t = actx.currentTime;
   for (const [f, d] of seq) {
-    const o = actx.createOscillator(), gn = actx.createGain(); o.frequency.value = f; o.type = kind === 'coin' ? 'triangle' : 'sine';
+    const o = actx.createOscillator(), gn = actx.createGain(); o.frequency.value = f; o.type = kind === 'coin' || kind === 'campana' ? 'triangle' : 'sine';
     gn.gain.setValueAtTime(.0001, t); gn.gain.exponentialRampToValueAtTime(.18, t + .01); gn.gain.exponentialRampToValueAtTime(.0001, t + d);
     o.connect(gn).connect(actx.destination); o.start(t); o.stop(t + d + .02); t += d + .02;
   }
@@ -431,7 +436,7 @@ function updatePointer(p) {
     showHover(p, p.held); p.dot.visible = false;
   } else {
     const hits = p.ray.intersectObjects(rayTargets, false);
-    const h = hits.find(x => x.object.visible !== false);
+    const h = hits.find(x => { for (let o = x.object; o; o = o.parent) if (o.visible === false) return false; return true; });
     if (h) {
       dist = h.distance; p.hit = h;
       if (h.object.userData.inter) p.hover = h.object.userData.inter;
@@ -464,6 +469,7 @@ function release(p) {
   if (p.pressing) { const e = p.pressing; p.pressing = null; e.onRelease && e.onRelease(p); }
   if (!p.held) return;
   const e = p.held; p.held = null;
+  refreshColliders(e.root);
   e.zone = zoneAt(e.root.position.x, e.root.position.z);
   saveLayout();
   publish(e.zone, e.id, 'layout', { x: +e.root.position.x.toFixed(2), z: +e.root.position.z.toFixed(2), rot: Math.round(e.root.rotation.y / DEG) });
@@ -663,7 +669,7 @@ function applySavedLayout() {
   for (const m of movables) {
     m.home = { pos: m.root.position.clone(), rotY: m.root.rotation.y };
     const s = saved && saved.find(e => e.id === m.id);
-    if (s) { m.root.position.set(...s.pos); m.root.rotation.y = s.rotY * DEG; }
+    if (s) { m.root.position.set(...s.pos); m.root.rotation.y = s.rotY * DEG; refreshColliders(m.root); }
     m.zone = zoneAt(m.root.position.x, m.root.position.z);
   }
 }

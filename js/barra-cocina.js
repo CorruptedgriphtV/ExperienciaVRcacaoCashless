@@ -438,7 +438,7 @@ function spawnTray(c) {
     onSelect() { entregar(t); },
   });
   trays.push(t);
-  beep('coin'); after(.3, () => beep('coin'));
+  beep('campana');
   say(`Comanda ${c.num} lista en el pase.`, 'Cocina');
 }
 function entregar(t) {

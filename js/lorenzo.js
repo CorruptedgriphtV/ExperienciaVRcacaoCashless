@@ -35,7 +35,7 @@ function resetEstado() {
   Object.assign(st, {
     paso: 'espera', pasoT: 0, recordado: false, credito: 0, enBandeja: false, ocupado: false,
     mirada: 0, saludoT: 0, talkT: 0, blinkT: 2, palanca: 0, cola: 0, volando: false,
-    firma: { trazos: [], tinta: 0, activa: false, ok: false, hora: null, ultimo: 0 }, msg: '',
+    firma: { trazos: [], tinta: 0, activa: false, ok: false, hora: null, movido: false, roto: false }, msg: '',
   });
 }
 resetEstado();
@@ -44,7 +44,8 @@ resetEstado();
 let eyeCam, panzaG;
 let G, pod, podMesh, jaw, lid, ledMat, lensMat, flash, cejas = [], armR, armL, lever, ombligoMat;
 let scr, stylus, tabletG, cred, llavero, coin, colliders = [];
-const STYLUS_HOME = new THREE.Vector3(.245, -.06, .03);
+const TABW = .56, TABH = .4;
+const STYLUS_HOME = new THREE.Vector3(TABW / 2 + .035, -.06, .03);
 
 /* mazorca: perfil ovalado alargado con 10 surcos */
 const POD = { sx: .34, sy: .7, cy: 1.3 };
@@ -164,10 +165,10 @@ function build() {
   }
   // boca con mandíbula
   const boca = onPod(.06, Math.PI / 2, -.01);
-  box(.2, .075, .03, M.negro, 0, -.01, 0, boca);
-  box(.23, .026, .04, M.oro, 0, .036, .006, boca);
+  box(.22, .1, .03, M.negro, 0, -.015, 0, boca);
+  box(.25, .03, .045, M.oro, 0, .042, .006, boca);
   jaw = new THREE.Group(); jaw.position.y = -.03; boca.add(jaw);
-  box(.21, .03, .04, M.oro, 0, -.012, .006, jaw);
+  box(.23, .034, .045, M.oro, 0, -.014, .006, jaw);
   box(.15, .012, .03, M.crema, 0, .006, .0, jaw);
   // ranura de monedas en la panza
   const panza = onPod(-.22, Math.PI / 2, .004); panzaG = panza;
@@ -215,11 +216,11 @@ function build() {
   box(.22, .12, .22, hitMat, -.02, 1.0, 1.25, plato);
 
   /* tablet integrada (derecha del mostrador, +x local) */
-  const stand = box(.32, .12, .14, M.cacaoOsc, .45, .98, 1.13, G); stand.rotation.x = -.3;
-  tabletG = new THREE.Group(); tabletG.position.set(.45, 1.07, 1.17); tabletG.rotation.x = -.62; G.add(tabletG);
-  box(.47, .34, .022, M.negro, 0, 0, -.012, tabletG);
-  box(.025, .2, .03, M.oro, .25, -.01, .005, tabletG);              // portalápiz
-  scr = makeScreen(.42, .3, 512); scr.mesh.position.z = .0015; scr.mesh.name = 'lor-tablet'; tabletG.add(scr.mesh);
+  const stand = box(.36, .14, .16, M.cacaoOsc, .5, .98, 1.17, G); stand.rotation.x = -.3;
+  tabletG = new THREE.Group(); tabletG.position.set(.5, 1.1, 1.22); tabletG.rotation.x = -.5; G.add(tabletG);
+  box(TABW + .05, TABH + .04, .022, M.negro, 0, 0, -.012, tabletG);
+  box(.025, .2, .03, M.oro, TABW / 2 + .035, -.01, .005, tabletG);              // portalápiz
+  scr = makeScreen(TABW, TABH, 512); scr.mesh.position.z = .0015; scr.mesh.name = 'lor-tablet'; tabletG.add(scr.mesh);
 
   /* letrero */
   const s = sign('Lorenzo el Cacao', 'registro · firma · llaveros NFC', 0, 0, 0, 0, 1.8);
@@ -236,7 +237,7 @@ function build() {
     hint: 'Clic para hablar con Lorenzo (o para que capture tu rostro)',
     onSelect: () => tocarLorenzo(),
   });
-  lorEntry.ringY = 0;
+  lorEntry.ringY = .95;
   registerInteractive(scr.mesh, {
     id: ID, name: 'Tablet de registro', zone: ZONA,
     hint: 'Mantén presionado y arrastra en el recuadro para firmar · luego toca Firmar',
@@ -323,7 +324,7 @@ function capturar() {
 }
 
 /* ---------------- tablet y firma ---------------- */
-const TW = 512, TH = Math.round(512 * .3 / .42);
+const TW = 512, TH = Math.round(512 * TABH / TABW);
 const BOX = { x: 16, y: 140, w: 480, h: 148 };
 const B_BORRAR = { x: 16, y: 298, w: 160, h: 50 }, B_FIRMAR = { x: 336, y: 298, w: 160, h: 50 };
 const inR = (x, y, r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
@@ -342,24 +343,24 @@ function tabletSelect(hit) {
   if (st.firma.ok) return;
   if (!socio.rostro) { st.msg = 'Primero, rostro'; beep('err'); toast('Primero Lorenzo debe registrar tu rostro'); drawTablet(); return; }
   st.firma.activa = true; st.msg = ''; st.pasoT = 0;
-  st.firma.trazos.push([[x, y]]); st.firma.ultimo = performance.now();
+  st.firma.trazos.push([[x, y]]); st.firma.movido = true; st.firma.roto = false;
   moverLapiz(hit.uv); drawTablet();
 }
 function tabletMove(hit) {
   const f = st.firma; if (!f.activa) return;
   const q = uvPx(hit); if (!q) return;
   const x = Math.min(BOX.x + BOX.w - 4, Math.max(BOX.x + 4, q[0])), y = Math.min(BOX.y + BOX.h - 4, Math.max(BOX.y + 4, q[1]));
-  const now = performance.now();
-  if (now - f.ultimo > 160 || !f.trazos.length) f.trazos.push([[x, y]]);
+  f.movido = true;
+  if (f.roto || !f.trazos.length) { f.roto = false; f.trazos.push([[x, y]]); }
   else {
     const t = f.trazos[f.trazos.length - 1], [px, py] = t[t.length - 1], d = Math.hypot(x - px, y - py);
-    if (d < 1.5) { f.ultimo = now; return; }
+    if (d < 1.5) return;
     t.push([x, y]); f.tinta += d;
   }
-  f.ultimo = now; st.pasoT = 0; moverLapiz(hit.uv); drawTablet();
+  st.pasoT = 0; moverLapiz(hit.uv); drawTablet();
 }
 function tabletRelease() { if (!st.firma.activa) return; st.firma.activa = false; lapizACasa(); }
-function moverLapiz(uv) { stylus.position.set((uv.x - .5) * .42, (uv.y - .5) * .3, .002); stylus.rotation.set(.85, 0, -.35); }
+function moverLapiz(uv) { stylus.position.set((uv.x - .5) * TABW, (uv.y - .5) * TABH, .002); stylus.rotation.set(.85, 0, -.35); }
 function lapizACasa() {
   const p0 = stylus.position.clone(), r0 = stylus.rotation.clone();
   anim(.3, k => { stylus.position.lerpVectors(p0, STYLUS_HOME, k); stylus.rotation.set(r0.x * (1 - k), 0, r0.z * (1 - k)); });
@@ -540,7 +541,7 @@ function tomarLlavero() {
     abono(c, 'Monedas en Lorenzo', ZONA, ID, 'monedas');
   }
   ir('final');
-  hablar(`¡Listo, ya es tuyo! ${c ? `Abonó ${c} cacao${c === 1 ? '' : 's'} a tu monedero con lo que sobró. ` : ''}Pasa a la barra; pide en la tablet y paga acercando tu llavero.`);
+  hablar(`¡Listo, ya es tuyo! ${c ? `Te abono ${c} cacao${c === 1 ? "" : "s"} al monedero con lo que sobró. ` : ''}Pasa a la barra; pide en la tablet y paga acercando tu llavero.`);
 }
 
 /* ---------------- reinicio ---------------- */
@@ -560,6 +561,8 @@ function update(dt, now) {
     G.updateMatrixWorld(true); for (const c of colliders) c.box.setFromObject(c.obj);
     lastPos.copy(G.position); lastRot.y = G.rotation.y;
   }
+  /* trazo cortado si el rayo salió del lienzo (core no llamó onMove este cuadro) */
+  if (st.firma.activa) { if (!st.firma.movido) st.firma.roto = true; st.firma.movido = false; }
   const H = headPos(v1), D = headDir(v2);
   const dist = Math.hypot(H.x - G.position.x, H.z - G.position.z);
   const cerca = dist < CERCA && zoneAt(H.x, H.z) === 'lobby';
@@ -597,7 +600,7 @@ function update(dt, now) {
   /* boca */
   st.talkT = Math.max(0, st.talkT - dt);
   const open = st.talkT > 0 ? (.5 + .5 * Math.sin(now * 17)) * (.55 + .45 * Math.sin(now * 6.1)) : 0;
-  jaw.position.y += (-.03 - open * .032 - jaw.position.y) * Math.min(1, dt * 20);
+  jaw.position.y += (-.03 - open * .045 - jaw.position.y) * Math.min(1, dt * 20);
   jaw.rotation.x = open * .25;
   /* cejas y LED de la cámara */
   const cap = st.paso === 'rostro' ? st.mirada / MIRADA_SEG : 0;
